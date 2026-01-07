@@ -1,9 +1,9 @@
 import json
-import random
 import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from config import *
+from spin import spin_handler
 
 # ----------------- DATABASE -----------------
 def load_users():
@@ -27,15 +27,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         users[uid] = {
             "coins": DAILY_COIN,
             "last_daily": str(datetime.date.today()),
-            "ref_used": False
+            "ref_used": False,
+            "ref_from": context.args[0] if context.args else None,
+            "ref_paid": False,
+            "spins_today": 0,
+            "last_spin_date": str(datetime.date.today()),
+            "last_spin_time": 0
         }
-
-        # REFERRAL
-        if context.args:
-            ref = context.args[0]
-            if ref in users and not users[uid]["ref_used"]:
-                users[ref]["coins"] += REF_COIN
-                users[uid]["ref_used"] = True
 
     save_users(users)
 
@@ -52,7 +50,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ----------------- DAILY COIN -----------------
+# ----------------- DAILY -----------------
 async def daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = load_users()
     uid = str(update.effective_user.id)
@@ -66,50 +64,11 @@ async def daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Bugun coin oldingiz")
 
-# ----------------- SPIN -----------------
-async def spin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    users = load_users()
-    uid = str(query.from_user.id)
-
-    if users[uid]["coins"] < SPIN_COST:
-        await query.message.reply_text("❌ Coin yetarli emas")
-        return
-
-    users[uid]["coins"] -= SPIN_COST
-
-    chance = random.randint(1, 100)
-
-    if chance <= 90:
-        prize = "❌ Hech narsa"
-    elif chance <= 97:
-        prize = "🎁 15 ta Telegram hadiya"
-        await context.bot.send_message(
-            chat_id=ADMIN_USERNAME,
-            text=f"🏆 G‘OLIB!\n\n👤 @{query.from_user.username}\n🎁 15 ta Telegram hadiya"
-        )
-    else:
-        prize = "🔥 120 PUBG UC"
-        await context.bot.send_message(
-            chat_id=ADMIN_USERNAME,
-            text=f"🏆 G‘OLIB!\n\n👤 @{query.from_user.username}\n🔥 120 PUBG UC"
-        )
-
-    save_users(users)
-
-    await query.message.reply_text(
-        "🎡 G‘ildirak aylanmoqda...\n\n"
-        "⏳ 3...\n⏳ 2...\n⏳ 1...\n\n"
-        f"🏁 Natija: {prize}"
-    )
-
 # ----------------- MAIN -----------------
 app = Application.builder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("daily", daily))
-app.add_handler(CallbackQueryHandler(spin, pattern="spin"))
+app.add_handler(CallbackQueryHandler(spin_handler, pattern="spin"))
 
 app.run_polling()
